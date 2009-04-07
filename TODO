@@ -1,0 +1,4 @@
+
+- Update mrtgsql to be rrd aware
+
+- Automatically parse the mrtg.cfg and insert the interfaces in the database

@@ -1,0 +1,107 @@
+	 -----------------------------------------------------------
+	 mrtgsql - a MRTG to SQL logging and reporting tool for MRTG
+	 by Max Clark <max@clarksys.com>
+	 -----------------------------------------------------------
+
+mrtgsql is composed of two programs: mrtgsql which inserts data from the 
+MRTG .log files into a database, and mrtgreport which reports usage on the 
+interfaces in total GB and the 95th percentile.
+
+Get it from:
+
+
+         http://www.cthought.com/software/mrtgsql/
+         =========================================
+
+
+Required Modules
+----------------
+
+- DBI and DBD::MySQL
+  -> get it from CPAN
+
+Note that several Linux distributions will already have these modules as 
+RPMs.
+
+
+Usage
+-----
+
+mrtgsql is made of two scripts:
+
+- mrtgsql
+
+  This script parses the MRTG .log files and updates the database with the 
+  values.
+ 
+  usage: mrtgreport [*options*]
+  -h, --help           display this help and exit
+      --version        output version information and exit
+  -v, --verbose        be verbose
+  -d, --directory      directory where the mrtg .log files exist
+      --dbname         database name to connect to
+      --dbuser         database user name
+      --dbpass         database password
+
+  If -d is not specified, it defaults to /usr/local/mrtg. Directory, 
+  dbname, dbuser, and dbpass are configurable within the script.
+
+- mrtgreport
+
+  This script reports data from the database in Total GB and the 95th 
+  percentile.
+
+  usage: mrtgreport [*options*]
+  -h, --help           display this help and exit
+      --version        output version information and exit
+  -v, --verbose        display debug messages
+  -l, --lastmonth      report for the previous month
+  -y, --year           select the year in YYYY format, defaults to the
+                       current year
+  -m, --month          select the month in MM format, defaults to the
+                       current month
+      --dbname         database name to connect to
+      --dbuser         database user name
+      --dbpass         database password
+
+  If a date is not specified the script defaults to the current month. For 
+  reporting purposes you should run this script with -l for the previous 
+  month.
+
+
+Installation
+------------
+
+- Extract the archive
+  gzip -d -c mrtgsql-<version>.tar.gz | tar xvf -
+  cd mrtgsql-<version>
+
+- Make the scripts executable
+  chmod 755 mrtgsql mrtgreport
+
+- Create a database for use with mrtgsql. A sample schema is located in
+  schema/mysql.sql
+
+  mysqladmin create mrtg
+  mysql mrtg < schema/mysql.sql
+
+- Define interfaces to monitor
+  Example: the switch interface is 10.1.1.1_2, and the description is
+  Mail Server 01
+
+  mysql> insert into interface (interface,description) values 
+  ('10.1.1.1_2','Mail Server 01');
+
+- Populate the tables
+  # ./mrtgsql -v
+
+- Add mrtgsql to cron
+
+- You will now be able to report on your data using mrtgreport
+
+
+License
+-------
+
+mrtgsql is released under the GPL license. See the file COPYING included in 
+the distribution for details.
