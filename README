@@ -1,7 +1,7 @@
-	 -----------------------------------------------------------
-	 mrtgsql - a MRTG to SQL logging and reporting tool for MRTG
-	 by Max Clark <max@clarksys.com>
-	 -----------------------------------------------------------
+	-----------------------------------------------------------
+	mrtgsql - a MRTG to SQL logging and reporting tool for MRTG
+	by Max Clark <max@clarksys.com>
+	-----------------------------------------------------------
 
 mrtgsql is composed of two programs: mrtgsql which inserts data from the 
 MRTG .log files into a database, and mrtgreport which reports usage on the 
@@ -9,15 +9,14 @@ interfaces in total GB and the 95th percentile.
 
 Get it from:
 
-
-         http://www.cthought.com/software/mrtgsql/
-         =========================================
+	https://github.com/CreativeThought/mrtgsql
+	==========================================
 
 
 Required Modules
 ----------------
 
-- DBI and DBD::MySQL
+- DBI and DBD::Pg or DBD::MySQL
   -> get it from CPAN
 
 Note that several Linux distributions will already have these modules as 
@@ -67,37 +66,6 @@ mrtgsql is made of two scripts:
   If a date is not specified the script defaults to the current month. For 
   reporting purposes you should run this script with -l for the previous 
   month.
-
-
-Installation
-------------
-
-- Extract the archive
-  gzip -d -c mrtgsql-<version>.tar.gz | tar xvf -
-  cd mrtgsql-<version>
-
-- Make the scripts executable
-  chmod 755 mrtgsql mrtgreport
-
-- Create a database for use with mrtgsql. A sample schema is located in
-  schema/mysql.sql
-
-  mysqladmin create mrtg
-  mysql mrtg < schema/mysql.sql
-
-- Define interfaces to monitor
-  Example: the switch interface is 10.1.1.1_2, and the description is
-  Mail Server 01
-
-  mysql> insert into interface (interface,description) values 
-  ('10.1.1.1_2','Mail Server 01');
-
-- Populate the tables
-  # ./mrtgsql -v
-
-- Add mrtgsql to cron
-
-- You will now be able to report on your data using mrtgreport
 
 
 License
