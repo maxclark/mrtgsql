@@ -2,7 +2,7 @@
 
 # mrtgsql.pl: a tool to archive mrtg data into a database
 #
-#    Copyright (C) 2004 Max Clark and Creative Thought Inc.
+#    Copyright (C) 2004-2011 Max Clark and Creative Thought, Inc.
 #
 #    This program is free software; you can redistribute it and/or modify
 #    it under the terms of the GNU General Public License as published by
@@ -27,10 +27,10 @@ my $VERSION = "0.1";
 
 # Configuration
 # -------------
+my $dbhost = "";
 my $dbname = "";
 my $dbuser = "";
 my $dbpass = "";
-my $mrtgspool = "/usr/local/mrtg";
 my $mrtgconfig = "/usr/local/etc/mrtg/mrtg.cfg";
 
 # Initialize Variables
@@ -38,6 +38,8 @@ my $mrtgconfig = "/usr/local/etc/mrtg/mrtg.cfg";
 my %count;
 my %oldend;
 my ($configfile, @target_names, %globalcfg, %targetcfg);
+my $device;
+my $name;
 
 sub usage
 {
@@ -46,6 +48,10 @@ sub usage
         print "  -h, --help           display this help and exit\n";
         print "  -c, --config         location of the MRTG configuration file\n";
         print "  -d, --directory      directory where the mrtg .log files exist\n";
+        print "      --dbhost         database host name\n";
+        print "      --dbuser         database user name\n";
+        print "      --dbpass         database password\n";
+        print "      --dbname         database name\n";
         print "      --version        output version information and exit\n";
         print "  -v, --verbose        be verbose\n";
         print "      --debug          print debug messages\n";
@@ -55,47 +61,78 @@ sub usage
 
 my %opt = ();
 GetOptions(\%opt,
-        'directory|d=s', 'config|c=s', 'debug', 'verbose|v', 'help|h', 'version'
+        'config|c=s', 'debug', 'verbose|v', 'help|h', 'version',
+	'dbhost=s', 'dbuser=s', 'dbpass=s', 'dbname=s'
         ) or exit(1);
 usage if $opt{help};
 
 if ($opt{version}) {
-        print "mrtgsql $VERSION by max\@cthought.com\n";
+        print "mrtgsql $VERSION by max\@clarksys.com\n";
         exit;
 }
 
 # Override defaults
 # -----------------
-$mrtgspool = $opt{directory} if defined $opt{directory};
-$configfile = $opt{config} ? defined $opt{config} : $mrtgconfig;
+$mrtgconfig = $opt{config} if defined $opt{config};
+$dbhost = $opt{dbhost} if defined $opt{dbhost};
+$dbuser = $opt{dbuser} if defined $opt{dbuser};
+$dbpass = $opt{dbpass} if defined $opt{dbpass};
+$dbname = $opt{dbname} if defined $opt{dbname};
 
 # Read in the Interfaces from MRTG
 # --------------------------------
-exit unless -r "$configfile";
-readcfg($configfile, \@target_names, \%globalcfg, \%targetcfg);
+exit unless -r "$mrtgconfig";
+readcfg($mrtgconfig, \@target_names, \%globalcfg, \%targetcfg);
+my $workdir = $globalcfg{workdir};
 
 # Connect to the Database
 # -----------------------
-my $dbh = DBI->connect("DBI:Pg:dbname=$dbname", $dbuser, $dbpass, { AutoCommit => 0 })
+my $dbh = DBI->connect("DBI:Pg:dbname=$dbname;host=$dbhost", $dbuser, $dbpass, { RaiseError => 1, AutoCommit => 0 })
 	or die "Couldn't connect to database: " . DBI->errstr;
 
 # SQL Queries
 # -----------
 my $last_date = $dbh->prepare_cached(q(
-	select date
-	from t_mrtglog
-	where interface = ?
+	select extract(epoch from date) as date
+	from mrtglog
+	where target = ?
 	order by date desc limit 1
 	)) or die "Couldn't prepare statement: " . $dbh->errstr;
 
 my $insert = $dbh->prepare_cached(q(
-	insert into t_mrtglog (interface,date,avgin,avgout,peakin,peakout)
-	values (?,?,?,?,?,?)
+	insert into mrtglog (target,date,avgin,avgout,peakin,peakout)
+	values (?,to_timestamp(?),?,?,?,?)
+	)) or die "Couldn't prepare statement: " . $dbh->errstr;
+
+my $target_select = $dbh->prepare_cached(q(
+	select target
+	from mrtgtarget
+	where target = ?
+	)) or die "Couldn't prepare statement: " . $dbh->errstr;
+
+my $target_insert = $dbh->prepare_cached(q(
+	insert into mrtgtarget (target,device,description,date)
+	values (?,?,?,now())
 	)) or die "Couldn't prepare statement: " . $dbh->errstr;
 
 # Get the last entry dates for the interfaces
 # -------------------------------------------
 foreach my $target (@target_names) {
+
+	# First update the target table
+	# -----------------------------
+	($device,$name) = split(/\s--\s/,$targetcfg{title}{$target});
+
+	$target_select->execute($target);
+
+	unless ($target_select->fetch()) {
+		$target_insert->execute($target,$device,$name) or die "Couldn't execute statement: " . $target_insert->errstr;
+		$target_insert->finish;
+	}
+
+	$target_select->finish();
+
+        $dbh->commit;
 
 	$last_date->execute($target);
 	my $last_ref = $last_date->fetchrow_hashref;
@@ -113,10 +150,16 @@ foreach my $target (@target_names) {
 
 	$count{$target} = "0";
 
-	next unless -r "$mrtgspool/$target.log";
+	print "Target file $workdir/$targetcfg{directory}{$target}/$target.log\n" if $opt{debug};
 
-	open(FILE, "< $mrtgspool/$target.log") || die "Cannot open $mrtgspool/$target.log: $!";
+	next unless -r "$workdir/$targetcfg{directory}{$target}/$target.log";
 
+	print "Opening file $workdir/$targetcfg{directory}{$target}/$target.log\n" if $opt{debug};
+
+	open(FILE, "< $workdir/$targetcfg{directory}{$target}/$target.log") || die "Cannot open $workdir/$targetcfg{directory}{$target}/$target.log: $!";
+
+	# Skip the first line of the log file
+	# -----------------------------------
 	my $line = <FILE>;
 
 	while (<FILE>) {
